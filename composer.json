@@ -18,10 +18,10 @@
     ],
     "require": {
         "php": ">=8.0.0",
-        "topthink/framework": "^8.0",
+        "topthink/framework": "^8.1",
         "topthink/think-orm": "^3.0|^4.0",
         "topthink/think-filesystem": "^2.0",
-        "guzzlehttp/guzzle": "^7.9",
+        "guzzlehttp/guzzle": "^7.10",
         "ext-curl": "*"
     },
     "require-dev": {
