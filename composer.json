@@ -46,13 +46,6 @@
             "@php think vendor:publish"
         ]
     },
-    "repositories": [
-        {
-            "type": "composer",
-            "url": "https://packagist.mirrors.sjtug.sjtu.edu.cn",
-            "canonical": false
-        }
-    ],
     "suggest": {
         "ext-zend opcache": "*"
     }
