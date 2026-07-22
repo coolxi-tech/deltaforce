@@ -10,10 +10,25 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     libfreetype6-dev \
     libzip-dev \
+    libcurl4-openssl-dev \
+    libsqlite3-dev \
+    curl \
     unzip \
     git \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install gd zip pdo pdo_mysql
+    && docker-php-ext-install curl gd zip pdo pdo_mysql pdo_sqlite opcache \
+    && rm -rf /var/lib/apt/lists/*
+
+# 启用 OPcache；当前容器通过 CLI SAPI 运行 ThinkPHP 内置服务器，因此同时开启 enable_cli
+RUN { \
+        echo 'opcache.enable=1'; \
+        echo 'opcache.enable_cli=1'; \
+        echo 'opcache.memory_consumption=128'; \
+        echo 'opcache.interned_strings_buffer=16'; \
+        echo 'opcache.max_accelerated_files=10000'; \
+        echo 'opcache.validate_timestamps=0'; \
+        echo 'opcache.save_comments=1'; \
+    } > /usr/local/etc/php/conf.d/opcache-recommended.ini
 
 # 安装 Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer

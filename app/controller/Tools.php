@@ -3,9 +3,13 @@
 namespace app\controller;
 
 use GuzzleHttp\Client;
+use think\facade\Cache;
 
 class Tools
 {
+    private const ITEMS_CACHE_KEY = 'tools:collection-items:v1';
+    private const ITEMS_CACHE_TTL = 3600;
+
     protected Client $client;
 
     protected array $items = [];
@@ -19,8 +23,18 @@ class Tools
         $this->client = new Client([
             'verify' => false,
             'version' => $httpVersion,
+            'connect_timeout' => 3.0,
+            'timeout' => 12.0,
         ]);
-        $this->items = $this->items('props', 'collection');
+
+        $items = Cache::get(self::ITEMS_CACHE_KEY);
+        if (!is_array($items) || $items === []) {
+            $items = $this->items('props', 'collection');
+            if ($items !== []) {
+                Cache::set(self::ITEMS_CACHE_KEY, $items, self::ITEMS_CACHE_TTL);
+            }
+        }
+        $this->items = $items;
     }
     /**
      * 前端展示方法，使用流式输出纯文本，延迟基于品阶
