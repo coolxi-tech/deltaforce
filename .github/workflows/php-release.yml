@@ -34,26 +34,24 @@ jobs:
           extensions: mbstring, curl, json, openssl, fileinfo
           tools: composer
 
+      # 提前获取版本号，确保后续构建产物名称始终完整
+      - name: 获取版本号
+        run: |
+          echo "VERSION=$(php -r 'echo json_decode(file_get_contents("composer.json"), true)["version"];')" >> "$GITHUB_ENV"
+          echo "BUILDTIME=$(TZ=Asia/Shanghai date)" >> "$GITHUB_ENV"
+
       # 缓存 Composer 依赖
       - name: 缓存 Composer 依赖
         uses: actions/cache@v4
         with:
           path: vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock', 'composer.json') }}
           restore-keys: ${{ runner.os }}-composer-
           cache-on-failure: true # 即使步骤失败也缓存
 
       # 安装 Composer 依赖
       - name: 安装依赖
         run: composer install --prefer-dist --no-progress --no-dev --optimize-autoloader
-
-      # 获取版本号
-      - name: 获取版本号
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
-          echo "VERSION=$(jq -r '.version' composer.json)" >> $GITHUB_ENV
-          echo "BUILDTIME=$(TZ=Asia/Shanghai date)" >> $GITHUB_ENV
 
       # 创建构建产物
       - name: 创建构建产物
@@ -63,7 +61,6 @@ jobs:
       # 列出打包文件
       - name: 列出打包文件
         run: unzip -l release-${{ env.VERSION }}-${{ github.run_id }}.zip
-        if: always() # 即使失败也运行，便于调试
 
       # 上传构建产物
       - name: 上传构建产物
@@ -74,6 +71,7 @@ jobs:
 
       # 创建 GitHub 发布
       - name: 创建 GitHub 发布
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}

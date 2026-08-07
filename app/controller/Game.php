@@ -5,6 +5,8 @@ namespace app\controller;
 use app\utils\Response;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
+use GuzzleHttp\Pool;
+use think\facade\Cache;
 use think\facade\Request;
 use think\response\Json;
 
@@ -12,6 +14,8 @@ class Game
 {
     private const IDE_URL = 'https://comm.ams.game.qq.com/ide/';
     private const ROLE_INFO_URL = 'https://comm.aci.game.qq.com/main';
+    private const PUBLIC_DATA_CACHE_TTL = 300;
+    private const BATCH_CONCURRENCY = 5;
 
     protected Client $client;
 
@@ -20,6 +24,8 @@ class Game
         $this->client = new Client([
             'verify' => false,
             'version' => 1.1,
+            'connect_timeout' => 3.0,
+            'timeout' => 12.0,
         ]);
     }
 
@@ -36,21 +42,29 @@ class Game
         ];
 
         $types = [4 => 'gun', 5 => 'operator'];
+        $requests = [];
         foreach ($types as $type => $key) {
-            for ($i = 1; $i <= 5; $i++) { // 长时间未游戏可能需要翻页获取
-                $data = $this->requestIde([
+            for ($page = 1; $page <= 5; $page++) { // 长时间未游戏可能需要翻页获取
+                $requests[$key . ':' . $page] = [
                     'iChartId' => 319386,
                     'iSubChartId' => 319386,
                     'sIdeToken' => 'zMemOt',
                     'type' => $type,
-                    'page' => $i,
-                ], $cookie);
+                    'page' => $page,
+                ];
+            }
+        }
+
+        $responses = $this->requestIdeBatch($requests, $cookie);
+        foreach (array_values($types) as $key) {
+            for ($page = 1; $page <= 5; $page++) {
+                $data = $responses[$key . ':' . $page];
+                if ($data['ret'] !== 0) {
+                    return Response::json(-1, '获取失败');
+                }
                 if ($data['ret'] === 0 && !empty($data['jData']['data'])) {
                     $gameData[$key] = array_merge($gameData[$key], $data['jData']['data']);
                 }
-            }
-            if ($data['ret'] != 0) {
-                return Response::json(-1, '获取失败');
             }
         }
 
@@ -73,17 +87,13 @@ class Game
             'money' => 0,
         ];
 
-        $data = $this->requestIde([
-            'iChartId' => 317814,
-            'iSubChartId' => 317814,
-            'sIdeToken' => 'QIRBwm',
-        ], $cookie);
-        if ($data['ret'] === 0) {
-            $gameData['player'] = array_merge($data['jData']['userData'], [
-                'charac_name' => urldecode($data['jData']['userData']['charac_name']),
-            ]);
-            $gameData['game'] = $data['jData']['careerData'];
-        }
+        $requests = [
+            'profile' => [
+                'iChartId' => 317814,
+                'iSubChartId' => 317814,
+                'sIdeToken' => 'QIRBwm',
+            ],
+        ];
 
         $currencyItems = [
             'coin' => 17888808888,
@@ -91,13 +101,26 @@ class Game
             'money' => 17020000010,
         ];
         foreach ($currencyItems as $key => $itemId) {
-            $data = $this->requestIde([
+            $requests[$key] = [
                 'iChartId' => 319386,
                 'iSubChartId' => 319386,
                 'sIdeToken' => 'zMemOt',
                 'type' => 3,
                 'item' => $itemId,
-            ], $cookie);
+            ];
+        }
+
+        $responses = $this->requestIdeBatch($requests, $cookie);
+        $data = $responses['profile'];
+        if ($data['ret'] === 0) {
+            $gameData['player'] = array_merge($data['jData']['userData'], [
+                'charac_name' => urldecode($data['jData']['userData']['charac_name']),
+            ]);
+            $gameData['game'] = $data['jData']['careerData'];
+        }
+
+        foreach (array_keys($currencyItems) as $key) {
+            $data = $responses[$key];
             if ($data['ret'] === 0) {
                 $gameData[$key] = (int) ($data['jData']['data'][0]['totalMoney'] ?? 0);
             }
@@ -108,37 +131,46 @@ class Game
 
     public function config(): Json
     {
-        $data = $this->requestIde([
-            'iChartId' => 352143,
-            'iSubChartId' => 352143,
-            'sIdeToken' => 'YWRywA',
-            'source' => 5,
-            'method' => 'dfm/config.list',
-            'param' => json_encode(['configType' => 'all']),
-        ]);
-        $gameData = $data['ret'] === 0 ? $data['jData']['data']['data']['config'] : [];
+        $gameData = $this->remember('game:config:v1', self::PUBLIC_DATA_CACHE_TTL, function (): ?array {
+            $data = $this->requestIde([
+                'iChartId' => 352143,
+                'iSubChartId' => 352143,
+                'sIdeToken' => 'YWRywA',
+                'source' => 5,
+                'method' => 'dfm/config.list',
+                'param' => json_encode(['configType' => 'all']),
+            ]);
 
-        return Response::json(0, '获取成功', $gameData);
+            return $data['ret'] === 0 ? $data['jData']['data']['data']['config'] : null;
+        });
+
+        return Response::json(0, '获取成功', $gameData ?? []);
     }
 
     public function items(): Json
     {
         $params = Request::only(['type', 'sub_type', 'item_id']);
-        $data = $this->requestIde([
-            'iChartId' => 352143,
-            'iSubChartId' => 352143,
-            'sIdeToken' => 'YWRywA',
-            'source' => 2,
-            'method' => 'dfm/object.list',
-            'param' => json_encode([
-                'primary' => $params['type'] ?? '',
-                'second' => $params['sub_type'] ?? '',
-                'objectID' => $params['item_id'] ?? '',
-            ]),
-        ]);
-        return $data['ret'] !== 0
+        $cacheKey = 'game:items:' . sha1(json_encode($params));
+        $gameData = $this->remember($cacheKey, self::PUBLIC_DATA_CACHE_TTL, function () use ($params): ?array {
+            $data = $this->requestIde([
+                'iChartId' => 352143,
+                'iSubChartId' => 352143,
+                'sIdeToken' => 'YWRywA',
+                'source' => 2,
+                'method' => 'dfm/object.list',
+                'param' => json_encode([
+                    'primary' => $params['type'] ?? '',
+                    'second' => $params['sub_type'] ?? '',
+                    'objectID' => $params['item_id'] ?? '',
+                ]),
+            ]);
+
+            return $data['ret'] === 0 ? ($data['jData']['data']['data']['list'] ?? []) : null;
+        });
+
+        return $gameData === null
             ? Response::json(-1, '获取失败')
-            : Response::json(0, '获取成功', $data['jData']['data']['data']['list'] ?? []);
+            : Response::json(0, '获取成功', $gameData);
     }
 
     public function price(): Json
@@ -164,16 +196,20 @@ class Game
 
         $gameData = $data['jData']['data']['data']['dataMap'];
         if (($params['recent'] ?? 0) == 1) {
-            foreach ($gameData as $key => &$item) {
-                $recentData = $this->requestIde([
+            $requests = [];
+            foreach (array_keys($gameData) as $key) {
+                $requests[$key] = [
                     'iChartId' => 352143,
                     'iSubChartId' => 352143,
                     'sIdeToken' => 'YWRywA',
                     'source' => 2,
                     'method' => 'dfm/object.price.recent',
                     'param' => json_encode(['objectID' => $key]),
-                ], $cookie);
-                $item['recent'] = $recentData['jData']['data']['data']['objectPriceRecent']['list'] ?? [];
+                ];
+            }
+            $responses = $this->requestIdeBatch($requests, $cookie);
+            foreach ($gameData as $key => &$item) {
+                $item['recent'] = $responses[$key]['jData']['data']['data']['objectPriceRecent']['list'] ?? [];
             }
             unset($item);
         }
@@ -564,6 +600,70 @@ class Game
         $response = $this->client->request('POST', self::IDE_URL, $options);
 
         return json_decode($response->getBody()->getContents(), true);
+    }
+
+    /**
+     * 并行执行多个相互独立的 IDE 请求，降低接口聚合时的总等待时间。
+     *
+     * @param array<string|int, array> $requests
+     * @return array<string|int, array>
+     */
+    private function requestIdeBatch(array $requests, ?CookieJar $cookie = null): array
+    {
+        if ($requests === []) {
+            return [];
+        }
+
+        $results = [];
+        $errors = [];
+        $requestGenerator = function () use ($requests, $cookie) {
+            foreach ($requests as $key => $formParams) {
+                yield $key => function () use ($formParams, $cookie) {
+                    $options = ['form_params' => $formParams];
+                    if ($cookie !== null) {
+                        $options['cookies'] = $cookie;
+                    }
+
+                    return $this->client->requestAsync('POST', self::IDE_URL, $options);
+                };
+            }
+        };
+
+        $pool = new Pool($this->client, $requestGenerator(), [
+            'concurrency' => self::BATCH_CONCURRENCY,
+            'fulfilled' => function ($response, $key) use (&$results): void {
+                $results[$key] = json_decode($response->getBody()->getContents(), true);
+            },
+            'rejected' => function ($reason, $key) use (&$errors): void {
+                $errors[$key] = $reason;
+            },
+        ]);
+        $pool->promise()->wait();
+
+        if ($errors !== []) {
+            $reason = reset($errors);
+            if ($reason instanceof \Throwable) {
+                throw $reason;
+            }
+            throw new \RuntimeException('批量请求失败');
+        }
+
+        return $results;
+    }
+
+    private function remember(string $key, int $ttl, callable $callback): mixed
+    {
+        $cached = Cache::get($key);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $value = $callback();
+        if ($value !== null) {
+            Cache::set($key, $value, $ttl);
+        }
+
+        return $value;
     }
 
     private function decodeUrlEncodedItemStack(string $value): array
