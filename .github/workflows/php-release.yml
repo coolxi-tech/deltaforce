@@ -24,7 +24,7 @@ jobs:
     steps:
       # 检出代码
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # 设置 PHP 环境
       - name: 设置 PHP 环境
@@ -42,7 +42,7 @@ jobs:
 
       # 缓存 Composer 依赖
       - name: 缓存 Composer 依赖
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: vendor
           key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock', 'composer.json') }}
@@ -64,7 +64,7 @@ jobs:
 
       # 上传构建产物
       - name: 上传构建产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: php-release-${{ env.VERSION }}-${{ github.run_id }}
           path: release-${{ env.VERSION }}-${{ github.run_id }}.zip
@@ -72,7 +72,7 @@ jobs:
       # 创建 GitHub 发布
       - name: 创建 GitHub 发布
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ env.VERSION }}
           name: DeltaForce API v${{ env.VERSION }}
