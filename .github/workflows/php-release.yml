@@ -30,7 +30,7 @@ jobs:
       - name: 设置 PHP 环境
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.0' # 可根据 ThinkPHP 版本调整
+          php-version: '8.2' # 可根据 ThinkPHP 版本调整
           extensions: mbstring, curl, json, openssl, fileinfo
           tools: composer
 
@@ -47,7 +47,6 @@ jobs:
           path: vendor
           key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock', 'composer.json') }}
           restore-keys: ${{ runner.os }}-composer-
-          cache-on-failure: true # 即使步骤失败也缓存
 
       # 安装 Composer 依赖
       - name: 安装依赖
