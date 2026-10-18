@@ -22,9 +22,12 @@ jobs:
       contents: write
 
     steps:
-      # 检出代码
+      # 检出代码（拉取完整历史与 tag，用于生成更新日志）
       - name: 检出代码
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       # 设置 PHP 环境
       - name: 设置 PHP 环境
@@ -39,6 +42,28 @@ jobs:
         run: |
           echo "VERSION=$(php -r 'echo json_decode(file_get_contents("composer.json"), true)["version"];')" >> "$GITHUB_ENV"
           echo "BUILDTIME=$(TZ=Asia/Shanghai date)" >> "$GITHUB_ENV"
+
+      # 生成发布说明（自动从上一版本 tag 到当前的提交历史）
+      - name: 生成更新内容
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+          {
+            echo "## DeltaForce API v${{ env.VERSION }} 更新内容"
+            echo ""
+            git log --no-merges --pretty=format:"- %s" "$RANGE" || echo "- （无提交记录）"
+            echo ""
+            echo ""
+            echo "---"
+            echo "构建提交：${{ github.sha }}"
+            echo "构建时间：${{ env.BUILDTIME }}"
+          } > RELEASE_BODY.md
+          echo "----- 生成的发布说明 -----"
+          cat RELEASE_BODY.md
 
       # 缓存 Composer 依赖
       - name: 缓存 Composer 依赖
@@ -75,8 +100,7 @@ jobs:
         with:
           tag_name: v${{ env.VERSION }}
           name: DeltaForce API v${{ env.VERSION }}
-          body: |
-            自动构建提交版 ${{ github.sha }} 构建时间:${{ env.BUILDTIME }}.
+          body_path: RELEASE_BODY.md
           draft: false
           prerelease: false
           files: release-${{ env.VERSION }}-${{ github.run_id }}.zip
