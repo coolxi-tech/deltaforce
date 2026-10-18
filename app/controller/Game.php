@@ -19,6 +19,8 @@ class Game
 
     protected Client $client;
 
+    public const APPID = 1112438254;
+
     public function __construct()
     {
         $this->client = new Client([
@@ -265,7 +267,7 @@ class Game
             return Response::json(-1, '获取失败,检查鉴权是否过期');
         }
 
-        if ($type == 3) {
+        if ($type === 3) {
             $data['jData']['data'] = ['totalMoney' => $data['jData']['data'][0]['totalMoney']];
         }
         return Response::json(0, '获取成功', $data['jData']['data']);
@@ -318,20 +320,14 @@ class Game
 
     public function password(): Json
     {
-        $params = $this->getRequiredParams(['openid', 'access_token']);
-        if ($params === null) {
-            return Response::json(-1, '缺少参数');
-        }
-
-        $cookie = $this->getAuthCookie($params);
         $data = $this->requestIde([
             'iChartId' => 352143,
             'iSubChartId' => 352143,
             'sIdeToken' => 'YWRywA',
             'method' => 'dfm/center.day.secret',
             'source' => 2,
-            'param' => json_encode([]),
-        ], $cookie);
+            'param' => json_encode([], JSON_THROW_ON_ERROR),
+        ]);
         if ($data['ret'] !== 0) {
             return Response::json(-1, '获取失败,检查鉴权是否过期');
         }
@@ -695,7 +691,7 @@ class Game
             'openid' => $openId,
             'access_token' => $accessToken,
             'acctype' => $isQQ ? 'qc' : 'wx',
-            'appid' => 101491592,
+            'appid' => self::APPID,
         ], '.qq.com');
     }
 }

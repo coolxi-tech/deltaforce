@@ -2,7 +2,7 @@
     "name": "coolxitech/deltaforce",
     "description": "三角洲行动API",
     "type": "project",
-    "version": "1.5.7",
+    "version": "1.5.8",
     "keywords": [
         "deltaforce",
         "thinkphp",
@@ -17,11 +17,11 @@
         }
     ],
     "require": {
-        "php": ">=8.0.0",
+        "php": ">=8.2",
         "topthink/framework": "^8.1",
         "topthink/think-orm": "^3.0|^4.0",
-        "topthink/think-filesystem": "^2.0",
-        "guzzlehttp/guzzle": "^7.10",
+        "topthink/think-filesystem": "^3.0",
+        "guzzlehttp/guzzle": "^8.0",
         "ext-curl": "*"
     },
     "require-dev": {
@@ -46,6 +46,8 @@
             "@php think vendor:publish"
         ]
     },
+    "repositories": [
+    ],
     "suggest": {
         "ext-zend opcache": "*"
     }

@@ -12,3 +12,5 @@ Thumbs.db
 /.project
 /public/df.db
 /.php-cs-fixer.cache
+.openbitfun/
+/.openbitfun/search/flashgrep-index/
