@@ -3,9 +3,9 @@ DeltaForce API
 
 ## 特性
 
-* 基于PHP`8.0+`
+* 基于PHP`8.2+`
 
-> DeltaForce API的运行环境要求PHP8.0+
+> DeltaForce API的运行环境要求PHP8.2+
 
 ## 文档
 
